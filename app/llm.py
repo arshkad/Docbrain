@@ -33,3 +33,67 @@ def _call_claude(system: str, user: str, max_tokens: int = 1024) -> str:
         messages=[{"role": "user", "content": user}],
     )
     return response.content[0].text.strip()
+    
+# ─── RAG Query ────────────────────────────────────────────────────────────────
+
+def rag_query(
+    collection_name: str,
+    question: str,
+    top_k: int = settings.top_k_results,
+    doc_filter: str | None = None,
+) -> dict:
+    """
+    Retrieve relevant chunks and generate a grounded answer.
+
+    Args:
+        collection_name: Which document collection to search
+        question: Natural language question
+        top_k: Number of chunks to retrieve
+        doc_filter: Optional filename to scope search to one document
+
+    Returns:
+        Answer with citations and source chunks
+    """
+    where = {"filename": doc_filter} if doc_filter else None
+    chunks = semantic_search(collection_name, question, top_k=top_k, where=where)
+
+    if not chunks:
+        return {
+            "answer": "No relevant documents found. Please upload documents to this collection first.",
+            "sources": [],
+            "chunks_used": 0,
+        }
+
+    context = _build_context(chunks)
+
+    system = """You are DocBrain, an expert business document analyst.
+Answer questions using ONLY the provided document context.
+- Be precise and factual
+- Cite sources using [Source N] notation
+- If the context doesn't contain enough info, say so clearly
+- Never hallucinate facts not in the context
+- Format numbers, dates, and proper nouns exactly as they appear"""
+
+    user = f"""DOCUMENT CONTEXT:
+{context}
+
+QUESTION: {question}
+
+Provide a clear, well-structured answer with citations."""
+
+    answer = _call_claude(system, user, max_tokens=1500)
+
+    return {
+        "answer": answer,
+        "sources": [
+            {
+                "filename": c["metadata"].get("filename"),
+                "chunk": c["metadata"].get("chunk_index", 0) + 1,
+                "relevance_score": c["score"],
+                "excerpt": c["text"][:200] + "..." if len(c["text"]) > 200 else c["text"],
+            }
+            for c in chunks
+        ],
+        "chunks_used": len(chunks),
+    }
+
