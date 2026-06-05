@@ -220,4 +220,43 @@ Extract all business intelligence as JSON."""
         "chunks_analyzed": len(chunks),
     }
 
+# ─── Cross-Collection Search ──────────────────────────────────────────────────
+
+def compare_documents(
+    collection_name: str,
+    doc_a: str,
+    doc_b: str,
+    aspect: str = "key differences and similarities",
+) -> dict:
+    """Compare two documents on a specific aspect."""
+    chunks_a = semantic_search(collection_name, aspect, top_k=4, where={"filename": doc_a})
+    chunks_b = semantic_search(collection_name, aspect, top_k=4, where={"filename": doc_b})
+
+    context_a = _build_context(chunks_a) if chunks_a else "No content found."
+    context_b = _build_context(chunks_b) if chunks_b else "No content found."
+
+    system = """You are DocBrain, a business document analyst.
+Compare two documents on the requested aspect.
+Structure your response with: ## Similarities, ## Key Differences, ## Recommendation
+Be specific — cite actual content from each document."""
+
+    user = f"""ASPECT TO COMPARE: {aspect}
+
+DOCUMENT A ({doc_a}):
+{context_a}
+
+DOCUMENT B ({doc_b}):
+{context_b}
+
+Provide a structured comparison."""
+
+    comparison = _call_claude(system, user, max_tokens=1500)
+
+    return {
+        "document_a": doc_a,
+        "document_b": doc_b,
+        "aspect": aspect,
+        "comparison": comparison,
+    }
+
 
