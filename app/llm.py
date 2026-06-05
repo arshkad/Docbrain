@@ -33,7 +33,7 @@ def _call_claude(system: str, user: str, max_tokens: int = 1024) -> str:
         messages=[{"role": "user", "content": user}],
     )
     return response.content[0].text.strip()
-    
+
 # ─── RAG Query ────────────────────────────────────────────────────────────────
 
 def rag_query(
@@ -96,4 +96,73 @@ Provide a clear, well-structured answer with citations."""
         ],
         "chunks_used": len(chunks),
     }
+    
+# ─── Summarization ────────────────────────────────────────────────────────────
+
+SUMMARY_PROMPTS = {
+    "executive": """Write a 3-5 sentence executive summary covering:
+the document's purpose, key findings or decisions, and recommended actions.
+Use clear business language. No jargon.""",
+
+    "detailed": """Write a comprehensive summary covering all major sections.
+Use headers (##) to organize. Include key facts, figures, dates, and names.
+Aim for 300-500 words.""",
+
+    "bullets": """Summarize as 8-12 bullet points.
+Each bullet = one distinct, actionable or factual insight.
+Start each with a strong verb or key noun. No fluff.""",
+
+    "risks": """Identify and summarize ONLY risks, issues, deadlines, obligations, or red flags.
+Format as a numbered list. For each: state the risk, its potential impact, and location in document.
+If no risks found, say so explicitly.""",
+}
+
+
+def summarize_document(
+    collection_name: str,
+    filename: str,
+    style: str = "executive",
+) -> dict:
+    """
+    Generate a structured summary of a specific document.
+
+    Retrieves representative chunks from the doc and summarizes them.
+    """
+    if style not in SUMMARY_PROMPTS:
+        raise ValueError(f"Style must be one of: {list(SUMMARY_PROMPTS.keys())}")
+
+    # Retrieve broad coverage of the document
+    chunks = semantic_search(
+        collection_name,
+        query="main topics key information summary overview",
+        top_k=8,
+        where={"filename": filename},
+    )
+
+    if not chunks:
+        raise ValueError(f"Document '{filename}' not found in collection '{collection_name}'")
+
+    context = _build_context(chunks)
+    prompt_instruction = SUMMARY_PROMPTS[style]
+
+    system = f"""You are DocBrain, an expert business document analyst.
+{prompt_instruction}
+Base your summary ONLY on the provided document content."""
+
+    user = f"""DOCUMENT: {filename}
+
+CONTENT:
+{context}
+
+Generate the requested summary."""
+
+    summary = _call_claude(system, user, max_tokens=1000)
+
+    return {
+        "filename": filename,
+        "summary_style": style,
+        "summary": summary,
+        "based_on_chunks": len(chunks),
+    }
+
 
