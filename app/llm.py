@@ -96,7 +96,7 @@ Provide a clear, well-structured answer with citations."""
         ],
         "chunks_used": len(chunks),
     }
-    
+
 # ─── Summarization ────────────────────────────────────────────────────────────
 
 SUMMARY_PROMPTS = {
@@ -163,6 +163,61 @@ Generate the requested summary."""
         "summary_style": style,
         "summary": summary,
         "based_on_chunks": len(chunks),
+    }
+# ─── Key Insights Extraction ──────────────────────────────────────────────────
+
+def extract_insights(collection_name: str, filename: str) -> dict:
+    """
+    Auto-extract structured business intelligence from a document:
+    action items, key dates, people/orgs, financial figures, decisions.
+    """
+    chunks = semantic_search(
+        collection_name,
+        query="dates deadlines people organizations money actions decisions",
+        top_k=10,
+        where={"filename": filename},
+    )
+
+    if not chunks:
+        raise ValueError(f"Document '{filename}' not found in collection '{collection_name}'")
+
+    context = _build_context(chunks)
+
+    system = """You are DocBrain, a business intelligence extractor.
+Extract structured data from the document. Return ONLY valid JSON, no markdown fences.
+Use this exact schema:
+{
+  "action_items": [{"task": "...", "owner": "...", "deadline": "..."}],
+  "key_dates": [{"date": "...", "event": "..."}],
+  "people_and_orgs": [{"name": "...", "role": "..."}],
+  "financial_figures": [{"amount": "...", "context": "..."}],
+  "key_decisions": ["..."],
+  "document_type": "contract|invoice|report|policy|memo|other"
+}
+If a field has no data, use an empty array. Be precise, only include what's in the text."""
+
+    user = f"""DOCUMENT: {filename}
+
+CONTENT:
+{context}
+
+Extract all business intelligence as JSON."""
+
+    import json
+    raw = _call_claude(system, user, max_tokens=1500)
+
+    try:
+        insights = json.loads(raw)
+    except json.JSONDecodeError:
+        # Fallback: try to extract JSON block
+        import re
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        insights = json.loads(match.group()) if match else {"raw": raw}
+
+    return {
+        "filename": filename,
+        "insights": insights,
+        "chunks_analyzed": len(chunks),
     }
 
 
