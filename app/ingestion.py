@@ -46,3 +46,86 @@ def extract_text(filename: str, file: BinaryIO) -> str:
         return extract_text_from_txt(file)
     else:
         raise ValueError(f"Unsupported file type: {ext}")
+        
+# ─── Chunking ─────────────────────────────────────────────────────────────────
+
+def count_tokens(text: str) -> int:
+    if not text:
+        return 0
+    return max(1, int(len(text.split()) * 1.35))
+
+
+def chunk_text(
+    text: str,
+    chunk_size: int = settings.chunk_size,
+    overlap: int = settings.chunk_overlap,
+) -> list[str]:
+    """
+    Sentence-aware chunking with token-based sizing.
+
+    Strategy:
+    1. Split into sentences
+    2. Greedily fill chunks up to chunk_size tokens
+    3. Add overlap by backtracking into the previous chunk
+    """
+    # Split on sentence boundaries
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    sentences = [s.strip() for s in sentences if s.strip()]
+
+    chunks = []
+    current_sentences = []
+    current_tokens = 0
+
+    for sentence in sentences:
+        sentence_tokens = count_tokens(sentence)
+
+        # Single sentence exceeds chunk — split by words
+        if sentence_tokens > chunk_size:
+            words = sentence.split()
+            word_buffer = []
+            word_tokens = 0
+            for word in words:
+                wt = count_tokens(word)
+                if word_tokens + wt > chunk_size and word_buffer:
+                    chunks.append(" ".join(word_buffer))
+                    # overlap: keep last N tokens worth of words
+                    overlap_words = []
+                    overlap_t = 0
+                    for w in reversed(word_buffer):
+                        if overlap_t + count_tokens(w) > overlap:
+                            break
+                        overlap_words.insert(0, w)
+                        overlap_t += count_tokens(w)
+                    word_buffer = overlap_words + [word]
+                    word_tokens = overlap_t + wt
+                else:
+                    word_buffer.append(word)
+                    word_tokens += wt
+            if word_buffer:
+                current_sentences.append(" ".join(word_buffer))
+                current_tokens += word_tokens
+            continue
+
+        if current_tokens + sentence_tokens > chunk_size and current_sentences:
+            chunks.append(" ".join(current_sentences))
+
+            # Overlap: retain recent sentences up to `overlap` tokens
+            overlap_sentences = []
+            overlap_tokens = 0
+            for s in reversed(current_sentences):
+                st = count_tokens(s)
+                if overlap_tokens + st > overlap:
+                    break
+                overlap_sentences.insert(0, s)
+                overlap_tokens += st
+
+            current_sentences = overlap_sentences + [sentence]
+            current_tokens = overlap_tokens + sentence_tokens
+        else:
+            current_sentences.append(sentence)
+            current_tokens += sentence_tokens
+
+    if current_sentences:
+        chunks.append(" ".join(current_sentences))
+
+    return chunks
