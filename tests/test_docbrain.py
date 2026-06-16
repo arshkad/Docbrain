@@ -102,3 +102,33 @@ def test_root_endpoint(client):
     response = client.get("/")
     assert response.status_code == 200
     assert response.json()["service"] == "DocBrain API"
+    
+# ─── LLM Layer Tests (mocked) ─────────────────────────────────────────────────
+
+@pytest.fixture
+def mock_claude():
+    """Mock Claude API calls."""
+    with patch("app.llm.client") as mock:
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Mocked Claude response")]
+        mock.messages.create.return_value = mock_response
+        yield mock
+
+
+@pytest.fixture
+def mock_search():
+    """Mock semantic search."""
+    sample_chunks = [
+        {
+            "text": "The contract value is $50,000 due on March 15, 2024.",
+            "metadata": {"filename": "contract.pdf", "chunk_index": 0, "total_chunks": 3},
+            "score": 0.92,
+        },
+        {
+            "text": "Payment terms: Net 30. Late fees apply after 30 days.",
+            "metadata": {"filename": "contract.pdf", "chunk_index": 1, "total_chunks": 3},
+            "score": 0.85,
+        },
+    ]
+    with patch("app.llm.semantic_search", return_value=sample_chunks) as mock:
+        yield mock
