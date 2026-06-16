@@ -102,7 +102,7 @@ def test_root_endpoint(client):
     response = client.get("/")
     assert response.status_code == 200
     assert response.json()["service"] == "DocBrain API"
-    
+
 # ─── LLM Layer Tests (mocked) ─────────────────────────────────────────────────
 
 @pytest.fixture
@@ -132,3 +132,12 @@ def mock_search():
     ]
     with patch("app.llm.semantic_search", return_value=sample_chunks) as mock:
         yield mock
+     
+def test_rag_query_with_results(mock_claude, mock_search):
+    """RAG query should return answer with sources."""
+    from app.llm import rag_query
+    result = rag_query("test-collection", "What is the contract value?")
+    assert "answer" in result
+    assert "sources" in result
+    assert len(result["sources"]) == 2
+    assert result["chunks_used"] == 2
