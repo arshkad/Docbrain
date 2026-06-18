@@ -141,3 +141,20 @@ def test_rag_query_with_results(mock_claude, mock_search):
     assert "sources" in result
     assert len(result["sources"]) == 2
     assert result["chunks_used"] == 2
+def test_rag_query_no_results():
+    """RAG query with no results should return helpful message."""
+    from app.llm import rag_query
+    with patch("app.llm.semantic_search", return_value=[]):
+        result = rag_query("empty-collection", "Anything?")
+        assert "No relevant documents" in result["answer"]
+        assert result["chunks_used"] == 0
+
+
+def test_summarize_executive(mock_claude, mock_search):
+    """Summarization should call Claude with correct style."""
+    from app.llm import summarize_document
+    result = summarize_document("test-collection", "contract.pdf", style="executive")
+    assert result["summary_style"] == "executive"
+    assert result["filename"] == "contract.pdf"
+    assert "summary" in result
+
