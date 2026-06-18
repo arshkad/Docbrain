@@ -157,4 +157,30 @@ def test_summarize_executive(mock_claude, mock_search):
     assert result["summary_style"] == "executive"
     assert result["filename"] == "contract.pdf"
     assert "summary" in result
+    
+def test_summarize_invalid_style(mock_search):
+    """Invalid summary style should raise ValueError."""
+    from app.llm import summarize_document
+    with pytest.raises(ValueError, match="Style must be one of"):
+        summarize_document("test-collection", "contract.pdf", style="invalid_style")
+
+
+def test_extract_insights(mock_search):
+    """Insight extraction should return structured JSON."""
+    import json
+    mock_insights = json.dumps({
+        "action_items": [{"task": "Sign contract", "owner": "Legal", "deadline": "2024-03-01"}],
+        "key_dates": [{"date": "2024-03-15", "event": "Payment due"}],
+        "people_and_orgs": [{"name": "Acme Corp", "role": "Vendor"}],
+        "financial_figures": [{"amount": "$50,000", "context": "Contract value"}],
+        "key_decisions": ["Approved 30-day payment terms"],
+        "document_type": "contract",
+    })
+
+    with patch("app.llm._call_claude", return_value=mock_insights):
+        from app.llm import extract_insights
+        result = extract_insights("test-collection", "contract.pdf")
+        assert result["insights"]["document_type"] == "contract"
+        assert len(result["insights"]["financial_figures"]) == 1
+        assert result["insights"]["financial_figures"][0]["amount"] == "$50,000"
 
