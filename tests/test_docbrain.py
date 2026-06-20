@@ -193,4 +193,43 @@ def test_compare_documents(mock_claude):
         assert result["document_a"] == "vendor_a.pdf"
         assert result["document_b"] == "vendor_b.pdf"
         assert result["aspect"] == "pricing"
+        
+# ─── Integration-style Tests ──────────────────────────────────────────────────
+
+def test_full_pipeline_text_to_chunks():
+    """Test the full text → chunks pipeline with realistic business text."""
+    sample_contract = """
+    SERVICE AGREEMENT
+
+    This Service Agreement ("Agreement") is entered into as of January 15, 2024,
+    between TechCorp Inc. ("Service Provider") and Acme Industries ("Client").
+
+    1. SERVICES
+    Service Provider agrees to deliver software development services as outlined
+    in Exhibit A. Work shall commence February 1, 2024, and be completed by June 30, 2024.
+
+    2. COMPENSATION
+    Client shall pay Service Provider $15,000 per month, invoiced on the first of
+    each month, due within 30 days of receipt. Late payments incur a 1.5% monthly fee.
+
+    3. CONFIDENTIALITY
+    Both parties agree to maintain strict confidentiality of proprietary information
+    disclosed during the term of this Agreement and for two years thereafter.
+
+    4. TERMINATION
+    Either party may terminate this Agreement with 30 days written notice.
+    Client shall pay for all work completed up to the termination date.
+    """
+
+    chunks = chunk_text(sample_contract, chunk_size=100, overlap=20)
+    assert len(chunks) >= 1
+    # Contract value should appear in some chunk
+    full_text = " ".join(chunks)
+    assert "$15,000" in full_text
+    assert "TechCorp" in full_text
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])
+
 
