@@ -9,16 +9,20 @@ from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import uvicorn
 
-from app.routers import documents, query, collections
+from app.routers import documents, query, collections, analytics as analytics_router
 from app.database import chroma_client
 from app.config import settings
+from app import analytics
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize ChromaDB on startup."""
+    """Initialize ChromaDB and analytics DB on startup."""
     print("🧠 DocBrain starting up...")
     chroma_client.heartbeat()
     print("✅ Vector store connected")
+    analytics.init_db()
+    print("✅ Analytics store ready")
     yield
     print("👋 DocBrain shutting down")
 
@@ -53,9 +57,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 app.include_router(collections.router, prefix="/collections", tags=["Collections"])
 app.include_router(documents.router, prefix="/documents", tags=["Documents"])
 app.include_router(query.router, prefix="/query", tags=["Query & Insights"])
+app.include_router(analytics_router.router, prefix="/analytics", tags=["Analytics"])
 
 
 @app.get("/", tags=["Health"])
