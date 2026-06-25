@@ -96,3 +96,45 @@ def timed_event(event_type: str, **meta):
             chunks_used=result.get("chunks_used"),
             **meta,
         )
+        
+# ─── Aggregation Queries ───────────────────────────────────────────────────────
+
+def get_summary_stats(days: int = 30) -> dict:
+    """High-level KPI numbers for the dashboard header."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        total_queries = c.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='query' AND created_at >= ?", (since,)
+        ).fetchone()[0]
+
+        total_uploads = c.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='upload' AND created_at >= ?", (since,)
+        ).fetchone()[0]
+
+        avg_latency = c.execute(
+            "SELECT AVG(latency_ms) FROM events WHERE event_type='query' AND created_at >= ? AND success=1", (since,)
+        ).fetchone()[0]
+
+        success_rate = c.execute(
+            """SELECT
+                 SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*)
+               FROM events WHERE created_at >= ?""", (since,)
+        ).fetchone()[0]
+
+        active_collections = c.execute(
+            "SELECT COUNT(DISTINCT collection_name) FROM events WHERE created_at >= ? AND collection_name IS NOT NULL", (since,)
+        ).fetchone()[0]
+
+        total_events = c.execute(
+            "SELECT COUNT(*) FROM events WHERE created_at >= ?", (since,)
+        ).fetchone()[0]
+
+    return {
+        "total_queries": total_queries,
+        "total_uploads": total_uploads,
+        "avg_latency_ms": round(avg_latency) if avg_latency else 0,
+        "success_rate": round((success_rate or 1.0) * 100, 1),
+        "active_collections": active_collections,
+        "total_events": total_events,
+        "period_days": days,
+    }
