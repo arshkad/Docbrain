@@ -138,7 +138,7 @@ def get_summary_stats(days: int = 30) -> dict:
         "total_events": total_events,
         "period_days": days,
     }
-    
+
 def get_query_volume_timeseries(days: int = 14) -> list[dict]:
     """Daily query counts for the trend chart. Range is inclusive of today."""
     today = datetime.now(UTC).date()
@@ -159,3 +159,32 @@ def get_query_volume_timeseries(days: int = 14) -> list[dict]:
         day = (since + timedelta(days=i)).isoformat()
         result.append({"date": day, "count": by_day.get(day, 0)})
     return result
+    
+def get_top_documents(limit: int = 8) -> list[dict]:
+    """Most-queried documents by chunk-filter usage and summarize/insights calls."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT filename, COUNT(*) as count
+               FROM events
+               WHERE filename IS NOT NULL
+               GROUP BY filename
+               ORDER BY count DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [{"filename": r["filename"], "count": r["count"]} for r in rows]
+
+
+def get_top_collections(limit: int = 8) -> list[dict]:
+    """Most active collections by event count."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT collection_name, COUNT(*) as count
+               FROM events
+               WHERE collection_name IS NOT NULL
+               GROUP BY collection_name
+               ORDER BY count DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [{"collection": r["collection_name"], "count": r["count"]} for r in rows]
