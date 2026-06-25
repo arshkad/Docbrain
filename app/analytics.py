@@ -26,7 +26,7 @@ def _conn():
         conn.commit()
     finally:
         conn.close()
-        
+
 def init_db():
     """Create tables if they don't exist. Safe to call on every startup."""
     with _conn() as c:
@@ -69,3 +69,30 @@ def log_event(
             )
     except Exception:
         pass  # analytics failures should never break the main request
+
+@contextmanager
+def timed_event(event_type: str, **meta):
+    """
+    Context manager that times a block and logs it as an event.
+
+    Usage:
+        with timed_event("query", collection_name="x", question="y") as result:
+            result["chunks_used"] = len(chunks)
+            ...do work...
+    """
+    start = time.time()
+    result = {"success": True}
+    try:
+        yield result
+    except Exception:
+        result["success"] = False
+        raise
+    finally:
+        latency_ms = int((time.time() - start) * 1000)
+        log_event(
+            event_type=event_type,
+            latency_ms=latency_ms,
+            success=result.get("success", True),
+            chunks_used=result.get("chunks_used"),
+            **meta,
+        )
