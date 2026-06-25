@@ -96,7 +96,7 @@ def timed_event(event_type: str, **meta):
             chunks_used=result.get("chunks_used"),
             **meta,
         )
-        
+
 # ─── Aggregation Queries ───────────────────────────────────────────────────────
 
 def get_summary_stats(days: int = 30) -> dict:
@@ -138,3 +138,24 @@ def get_summary_stats(days: int = 30) -> dict:
         "total_events": total_events,
         "period_days": days,
     }
+    
+def get_query_volume_timeseries(days: int = 14) -> list[dict]:
+    """Daily query counts for the trend chart. Range is inclusive of today."""
+    today = datetime.now(UTC).date()
+    since = today - timedelta(days=days - 1)
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT date(created_at) as day, COUNT(*) as count
+               FROM events
+               WHERE event_type='query' AND date(created_at) >= ?
+               GROUP BY day ORDER BY day ASC""",
+            (since.isoformat(),),
+        ).fetchall()
+
+    by_day = {r["day"]: r["count"] for r in rows}
+    # Fill in missing days with 0 so the chart has no gaps
+    result = []
+    for i in range(days):
+        day = (since + timedelta(days=i)).isoformat()
+        result.append({"date": day, "count": by_day.get(day, 0)})
+    return result
