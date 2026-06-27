@@ -46,3 +46,57 @@ async def ask_question(body: QueryRequest):
         raise HTTPException(404, str(e))
     except Exception as e:
         raise HTTPException(500, f"Query failed: {e}")
+
+@router.post("/ask/stream")
+async def ask_question_stream(body: QueryRequest):
+    """
+    **Streaming RAG Q&A — answer types out in real time (SSE).**
+
+    Same retrieval + grounding behavior as `/ask`, but streams the answer
+    token-by-token for a responsive chat UI. Supports `history` for follow-ups.
+
+    Event stream format (Server-Sent Events):
+    - `{"type": "sources", "sources": [...]}` — sent first
+    - `{"type": "delta", "text": "..."}` — repeated for each token
+    - `{"type": "done"}` — stream complete
+    - `{"type": "error", "message": "..."}` — on failure
+    """
+    def event_generator():
+        yield from rag_query_stream(
+            collection_name=body.collection_name,
+            question=body.question,
+            top_k=body.top_k,
+            doc_filter=body.doc_filter,
+            history=_history_to_dicts(body.history),
+        )
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/summarize", response_model=SummaryResponse)
+async def summarize(body: SummaryRequest):
+    """
+    **Generate a structured summary of a document.**
+
+    Available styles:
+    - `executive` — 3-5 sentence C-suite summary
+    - `detailed` — comprehensive summary with headers
+    - `bullets` — 8-12 action-oriented bullet points
+    - `risks` — risks, obligations, and red flags only
+    """
+    try:
+        result = summarize_document(
+            collection_name=body.collection_name,
+            filename=body.filename,
+            style=body.style,
+        )
+        return SummaryResponse(**result)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Summarization failed: {e}")
+
