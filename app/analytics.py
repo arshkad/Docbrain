@@ -212,3 +212,26 @@ def get_recent_queries(limit: int = 20) -> list[dict]:
             (limit,),
         ).fetchall()
     return [dict(r) for r in rows]
+
+def get_latency_distribution(days: int = 30) -> dict:
+    """Percentile breakdown of query latency for performance monitoring."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT latency_ms FROM events
+               WHERE event_type='query' AND success=1 AND created_at >= ?
+               ORDER BY latency_ms ASC""",
+            (since,),
+        ).fetchall()
+    latencies = [r["latency_ms"] for r in rows if r["latency_ms"] is not None]
+    if not latencies:
+        return {"p50": 0, "p90": 0, "p99": 0, "min": 0, "max": 0, "count": 0}
+
+    def pct(p):
+        idx = min(int(len(latencies) * p), len(latencies) - 1)
+        return latencies[idx]
+
+    return {
+        "p50": pct(0.5), "p90": pct(0.9), "p99": pct(0.99),
+        "min": latencies[0], "max": latencies[-1], "count": len(latencies),
+    }
