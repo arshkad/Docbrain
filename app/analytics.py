@@ -159,7 +159,7 @@ def get_query_volume_timeseries(days: int = 14) -> list[dict]:
         day = (since + timedelta(days=i)).isoformat()
         result.append({"date": day, "count": by_day.get(day, 0)})
     return result
-    
+
 def get_top_documents(limit: int = 8) -> list[dict]:
     """Most-queried documents by chunk-filter usage and summarize/insights calls."""
     with _conn() as c:
@@ -188,3 +188,27 @@ def get_top_collections(limit: int = 8) -> list[dict]:
             (limit,),
         ).fetchall()
     return [{"collection": r["collection_name"], "count": r["count"]} for r in rows]
+
+def get_event_breakdown(days: int = 30) -> list[dict]:
+    """Count of events by type — powers a simple pie/bar split."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT event_type, COUNT(*) as count
+               FROM events WHERE created_at >= ?
+               GROUP BY event_type ORDER BY count DESC""",
+            (since,),
+        ).fetchall()
+    return [{"type": r["event_type"], "count": r["count"]} for r in rows]
+
+
+def get_recent_queries(limit: int = 20) -> list[dict]:
+    """Recent query log for an activity feed."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT collection_name, question, latency_ms, chunks_used, success, created_at
+               FROM events WHERE event_type='query'
+               ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
