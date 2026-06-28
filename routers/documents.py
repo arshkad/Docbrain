@@ -1,0 +1,45 @@
+"""Document ingestion endpoints — file upload and raw text."""
+
+import io
+from pathlib import Path
+
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
+from pydantic import BaseModel
+from app.schemas import TextIngestRequest, IngestResponse, DocumentListResponse
+from app.ingestion import ingest_document, extract_text
+from app.database import get_or_create_collection, chroma_client
+from app.config import settings
+from app.analytics import log_event
+
+router = APIRouter()
+
+
+@router.post("/upload", response_model=IngestResponse, status_code=201)
+async def upload_file(
+    collection_name: str = Form(..., description="Target collection name"),
+    file: UploadFile = File(...),
+    tags: str | None = Form(None, description="Comma-separated tags, e.g. 'legal,2024,urgent'"),
+):
+    """
+    Upload a document file (PDF, TXT, MD, CSV) to a collection.
+
+    The document is automatically:
+    1. Parsed (text extracted from PDF if needed)
+    2. Chunked with semantic overlap
+    3. Embedded and stored in the vector database
+
+    Max file size: 20MB
+    """
+    # Validate file size
+    content = await file.read()
+    size_mb = len(content) / (1024 * 1024)
+    if size_mb > settings.max_file_size_mb:
+        raise HTTPException(413, f"File too large: {size_mb:.1f}MB (max {settings.max_file_size_mb}MB)")
+
+    # Validate extension
+    ext = Path(file.filename).suffix.lower()
+    if ext not in settings.allowed_extensions:
+        raise HTTPException(
+            415,
+            f"Unsupported file type '{ext}'. Allowed: {settings.allowed_extensions}"
+        )
