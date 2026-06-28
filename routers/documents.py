@@ -152,7 +152,7 @@ async def delete_document(collection_name: str, filename: str):
 
     col.delete(ids=ids)
     return {"message": f"Deleted '{filename}' ({len(ids)} chunks) from '{collection_name}'"}
-    
+
 # ─── Bulk Operations & Tagging ────────────────────────────────────────────────
 
 class BulkDeleteRequest(BaseModel):
@@ -192,3 +192,66 @@ async def bulk_delete(body: BulkDeleteRequest):
         "total_deleted": sum(r["deleted_chunks"] for r in results),
         "files_processed": len(results),
     }
+    
+@router.put("/tags")
+async def update_tags(body: TagUpdateRequest):
+    """
+    Replace the tag set on a document. Tags apply to ALL chunks of that document
+    so they show up consistently in search filters and the doc list.
+    """
+    try:
+        col = chroma_client.get_collection(body.collection_name)
+    except Exception:
+        raise HTTPException(404, f"Collection '{body.collection_name}' not found")
+
+    found = col.get(where={"filename": body.filename}, include=["metadatas"])
+    ids = found.get("ids") or []
+    metadatas = found.get("metadatas") or []
+
+    if not ids:
+        raise HTTPException(404, f"Document '{body.filename}' not found in collection")
+
+    updated_metas = []
+    for meta in metadatas:
+        # Strip old tag_N keys, then re-add the new tag set
+        clean = {k: v for k, v in meta.items() if not k.startswith("tag_")}
+        for i, tag in enumerate(body.tags):
+            clean[f"tag_{i}"] = tag.strip()
+        updated_metas.append(clean)
+
+    col.update(ids=ids, metadatas=updated_metas)
+    return {"filename": body.filename, "tags": body.tags, "chunks_updated": len(ids)}
+
+
+@router.get("/{collection_name}/{filename}/preview")
+async def preview_document(collection_name: str, filename: str, max_chunks: int = Query(5, ge=1, le=20)):
+    """
+    Preview the raw extracted text of a document, reconstructed from its chunks in order.
+    Useful for verifying ingestion quality before querying.
+    """
+    try:
+        col = chroma_client.get_collection(collection_name)
+    except Exception:
+        raise HTTPException(404, f"Collection '{collection_name}' not found")
+
+    found = col.get(where={"filename": filename}, include=["documents", "metadatas"])
+    docs = found.get("documents") or []
+    metas = found.get("metadatas") or []
+
+    if not docs:
+        raise HTTPException(404, f"Document '{filename}' not found in collection")
+
+    # Sort chunks back into original order
+    paired = sorted(zip(metas, docs), key=lambda x: x[0].get("chunk_index", 0))
+    ordered_text = [text for _, text in paired[:max_chunks]]
+
+    total_chunks = paired[0][0].get("total_chunks", len(paired)) if paired else 0
+
+    return {
+        "filename": filename,
+        "preview_text": "\n\n".join(ordered_text),
+        "chunks_shown": len(ordered_text),
+        "total_chunks": total_chunks,
+        "truncated": total_chunks > max_chunks,
+    }
+
