@@ -67,7 +67,7 @@ async def upload_file(
     except Exception as e:
         log_event("upload", collection_name=collection_name, filename=file.filename, success=False)
         raise HTTPException(500, f"Ingestion failed: {e}")
-        
+
 @router.post("/text", response_model=IngestResponse, status_code=201)
 async def ingest_text(body: TextIngestRequest):
     """
@@ -132,3 +132,24 @@ async def list_documents(
         documents=doc_list,
         total_documents=len(docs),
     )
+    
+@router.delete("/{collection_name}/{filename}")
+async def delete_document(collection_name: str, filename: str):
+    """
+    Delete all chunks of a specific document from a collection.
+    """
+    try:
+        col = chroma_client.get_collection(collection_name)
+    except Exception:
+        raise HTTPException(404, f"Collection '{collection_name}' not found")
+
+    # Find all chunk IDs for this document
+    results = col.get(where={"filename": filename}, include=["metadatas"])
+    ids = results.get("ids") or []
+
+    if not ids:
+        raise HTTPException(404, f"Document '{filename}' not found in collection")
+
+    col.delete(ids=ids)
+    return {"message": f"Deleted '{filename}' ({len(ids)} chunks) from '{collection_name}'"}
+
