@@ -132,7 +132,7 @@ async def list_documents(
         documents=doc_list,
         total_documents=len(docs),
     )
-    
+
 @router.delete("/{collection_name}/{filename}")
 async def delete_document(collection_name: str, filename: str):
     """
@@ -152,4 +152,43 @@ async def delete_document(collection_name: str, filename: str):
 
     col.delete(ids=ids)
     return {"message": f"Deleted '{filename}' ({len(ids)} chunks) from '{collection_name}'"}
+    
+# ─── Bulk Operations & Tagging ────────────────────────────────────────────────
 
+class BulkDeleteRequest(BaseModel):
+    collection_name: str
+    filenames: list[str]
+
+
+class TagUpdateRequest(BaseModel):
+    collection_name: str
+    filename: str
+    tags: list[str]
+
+
+@router.post("/bulk-delete")
+async def bulk_delete(body: BulkDeleteRequest):
+    """
+    Delete multiple documents from a collection in one call.
+    Returns per-file results so partial failures are visible.
+    """
+    try:
+        col = chroma_client.get_collection(body.collection_name)
+    except Exception:
+        raise HTTPException(404, f"Collection '{body.collection_name}' not found")
+
+    results = []
+    for filename in body.filenames:
+        found = col.get(where={"filename": filename}, include=["metadatas"])
+        ids = found.get("ids") or []
+        if ids:
+            col.delete(ids=ids)
+            results.append({"filename": filename, "deleted_chunks": len(ids), "success": True})
+        else:
+            results.append({"filename": filename, "deleted_chunks": 0, "success": False})
+
+    return {
+        "results": results,
+        "total_deleted": sum(r["deleted_chunks"] for r in results),
+        "files_processed": len(results),
+    }
