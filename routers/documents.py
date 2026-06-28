@@ -67,3 +67,68 @@ async def upload_file(
     except Exception as e:
         log_event("upload", collection_name=collection_name, filename=file.filename, success=False)
         raise HTTPException(500, f"Ingestion failed: {e}")
+        
+@router.post("/text", response_model=IngestResponse, status_code=201)
+async def ingest_text(body: TextIngestRequest):
+    """
+    Ingest raw text directly (no file upload needed).
+
+    Useful for ingesting content from databases, APIs, or web scraping.
+    """
+    try:
+        result = ingest_document(
+            body.collection_name,
+            body.filename,
+            body.content,
+            body.metadata,
+        )
+        return IngestResponse(**result)
+    except Exception as e:
+        raise HTTPException(500, f"Ingestion failed: {e}")
+
+
+@router.get("/{collection_name}", response_model=DocumentListResponse)
+async def list_documents(
+    collection_name: str,
+    limit: int = Query(50, ge=1, le=200),
+):
+    """
+    List all documents in a collection with their chunk counts and metadata.
+    """
+    try:
+        col = chroma_client.get_collection(collection_name)
+    except Exception:
+        raise HTTPException(404, f"Collection '{collection_name}' not found")
+
+    # Get all metadata to group by document
+    results = col.get(include=["metadatas"], limit=10000)
+    metadatas = results.get("metadatas") or []
+
+    # Group chunks by document
+    docs: dict[str, dict] = {}
+    for meta in metadatas:
+        filename = meta.get("filename", "unknown")
+        if filename not in docs:
+            docs[filename] = {
+                "filename": filename,
+                "doc_id": meta.get("doc_id", ""),
+                "chunks": 0,
+                "total_tokens": 0,
+                "tags": [],
+            }
+        docs[filename]["chunks"] += 1
+        docs[filename]["total_tokens"] += int(meta.get("token_count", 0))
+        # Collect tags
+        for k, v in meta.items():
+            if k.startswith("tag_"):
+                tag = str(v)
+                if tag not in docs[filename]["tags"]:
+                    docs[filename]["tags"].append(tag)
+
+    doc_list = list(docs.values())[:limit]
+
+    return DocumentListResponse(
+        collection=collection_name,
+        documents=doc_list,
+        total_documents=len(docs),
+    )
