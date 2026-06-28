@@ -43,3 +43,27 @@ async def upload_file(
             415,
             f"Unsupported file type '{ext}'. Allowed: {settings.allowed_extensions}"
         )
+    # Extract text
+    try:
+        text = extract_text(file.filename, io.BytesIO(content))
+    except Exception as e:
+        raise HTTPException(422, f"Failed to extract text: {e}")
+
+    if len(text.strip()) < 50:
+        raise HTTPException(422, "Document appears to be empty or unreadable")
+
+    # Build metadata
+    extra_meta = {"size_mb": str(round(size_mb, 3))}
+    if tags:
+        for i, tag in enumerate(tags.split(",")):
+            extra_meta[f"tag_{i}"] = tag.strip()
+
+    # Ingest
+    try:
+        result = ingest_document(collection_name, file.filename, text, extra_meta)
+        log_event("upload", collection_name=collection_name, filename=file.filename,
+                   chunks_used=result.get("chunks_stored"), success=True)
+        return IngestResponse(**result)
+    except Exception as e:
+        log_event("upload", collection_name=collection_name, filename=file.filename, success=False)
+        raise HTTPException(500, f"Ingestion failed: {e}")
