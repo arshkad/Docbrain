@@ -71,3 +71,65 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Training on device: {device}")
+    
+   # Build vocab from training text only (standard practice — val/test must
+    # not leak into vocabulary construction)
+    train_texts = load_jsonl_texts(train_path)
+    vocab = Vocabulary.build(train_texts, min_freq=2, max_size=8000)
+    print(f"Vocabulary size: {len(vocab)}")
+
+    label_to_id = {label: i for i, label in enumerate(LABELS)}
+
+    train_ds = DocDataset(train_path, vocab, label_to_id)
+    val_ds = DocDataset(val_path, vocab, label_to_id)
+
+    train_loader = DataLoader(train_ds, batch_size=32, shuffle=True, collate_fn=collate_batch)
+    val_loader = DataLoader(val_ds, batch_size=32, shuffle=False, collate_fn=collate_batch)
+
+    model = DocTypeClassifier(vocab_size=len(vocab), embed_dim=64, hidden_dim=32, n_classes=len(LABELS)).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    criterion = nn.CrossEntropyLoss()
+
+    n_epochs = 12
+    best_val_acc = 0.0
+    start = time.time()
+
+    for epoch in range(1, n_epochs + 1):
+        model.train()
+        total_loss = 0.0
+        for tokens, offsets, labels in train_loader:
+            tokens, offsets, labels = tokens.to(device), offsets.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            logits = model(tokens, offsets)
+            loss = criterion(logits, labels)
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=2.0)
+            optimizer.step()
+
+            total_loss += loss.item()
+
+        val_acc = evaluate(model, val_loader, device)
+        avg_loss = total_loss / len(train_loader)
+        print(f"Epoch {epoch:2d}/{n_epochs} — loss: {avg_loss:.4f} — val_acc: {val_acc:.3f}")
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+            torch.save({
+                "model_state": model.state_dict(),
+                "vocab_size": len(vocab),
+                "embed_dim": 64,
+                "hidden_dim": 32,
+                "labels": LABELS,
+                "val_acc": val_acc,
+            }, CHECKPOINT_DIR / "classifier.pt")
+            vocab.save(CHECKPOINT_DIR / "vocab.json")
+
+    elapsed = time.time() - start
+    print(f"\nTraining complete in {elapsed:.1f}s. Best val accuracy: {best_val_acc:.3f}")
+    print(f"Checkpoint saved to {CHECKPOINT_DIR}/classifier.pt")
+
+
+if __name__ == "__main__":
+    main()
