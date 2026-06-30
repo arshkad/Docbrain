@@ -26,7 +26,7 @@ def gen_contract():
         f"any confidential information to third parties for a period of three years.",
     ]
     return random.choice(templates)
-    
+
 def gen_invoice():
     company = rand_company()
     inv_num = random.randint(10000, 99999)
@@ -82,3 +82,53 @@ def gen_policy():
         f"disciplinary action up to termination.",
     ]
     return random.choice(templates)
+    
+def gen_memo():
+    sender, dept = rand_name(), random.choice(DEPTS)
+    templates = [
+        f"MEMORANDUM\n\nTo: All Staff\nFrom: {sender}, {dept}\nDate: {rand_date()}\n"
+        f"Re: Office Closure Notice\n\nPlease be advised that the office will be closed on "
+        f"{rand_date()} for scheduled maintenance. All employees should plan to work remotely "
+        f"that day. Contact {rand_name()} with any questions.",
+
+        f"INTERNAL MEMO\n\nFrom: {sender}\nTo: {dept} Team\nDate: {rand_date()}\n\n"
+        f"This is a reminder that the deadline for {random.choice(['budget submissions','performance reviews','project status updates'])} "
+        f"is {rand_date()}. Please ensure all materials are submitted on time to avoid delays "
+        f"in the next planning cycle.",
+    ]
+    return random.choice(templates)
+
+
+def gen_other():
+    templates = [
+        f"Meeting notes from {rand_date()} sync. Attendees discussed roadmap priorities for "
+        f"next sprint. Action items were assigned to {rand_name()} and {rand_name()}. "
+        f"Next check-in scheduled for {rand_date()}.",
+
+        f"FAQ: How do I reset my password?\n\nTo reset your password, navigate to account "
+        f"settings and click 'Forgot Password'. You will receive an email with a reset link "
+        f"valid for 24 hours. Contact support if you do not receive the email.",
+
+        f"Product changelog v{random.randint(1,9)}.{random.randint(0,20)}.{random.randint(0,9)} "
+        f"— Added dark mode support, fixed a bug causing crashes on startup, improved load "
+        f"times by {random.randint(10,60)}%.",
+    ]
+    return random.choice(templates)
+
+    GENERATORS = {
+    "contract": gen_contract,
+    "invoice": gen_invoice,
+    "report": gen_report,
+    "policy": gen_policy,
+    "memo": gen_memo,
+    "other": gen_other,
+}
+
+
+def generate_dataset(n_per_class: int = 150) -> list[dict]:
+    examples = []
+    for label, gen_fn in GENERATORS.items():
+        for _ in range(n_per_class):
+            examples.append({"text": gen_fn(), "label": label})
+    random.shuffle(examples)
+    return examples
