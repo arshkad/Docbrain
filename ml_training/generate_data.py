@@ -26,3 +26,59 @@ def gen_contract():
         f"any confidential information to third parties for a period of three years.",
     ]
     return random.choice(templates)
+    
+def gen_invoice():
+    company = rand_company()
+    inv_num = random.randint(10000, 99999)
+    templates = [
+        f"INVOICE #{inv_num}\n\n{company}\nDate: {rand_date()}\nDue Date: {rand_date()}\n\n"
+        f"Bill To: {rand_company()}\n\n"
+        f"Description: Professional services rendered\nQuantity: {random.randint(1,40)}\n"
+        f"Rate: {rand_amount()}\nSubtotal: {rand_amount()}\nTax: {rand_amount()}\n"
+        f"TOTAL DUE: {rand_amount()}\n\nPayment Terms: Net 30. Please remit payment to the "
+        f"account listed below.",
+
+        f"{company} — INVOICE\n\nInvoice Number: INV-{inv_num}\nIssue Date: {rand_date()}\n\n"
+        f"Item: Consulting hours ({random.randint(5,80)} hrs @ {rand_amount()}/hr)\n"
+        f"Amount Due: {rand_amount()}\n\nLate payments are subject to a 1.5% monthly fee. "
+        f"Thank you for your business.",
+    ]
+    return random.choice(templates)
+
+
+def gen_report():
+    company = rand_company()
+    templates = [
+        f"QUARTERLY BUSINESS REVIEW — {company}\n\nExecutive Summary: Revenue grew to "
+        f"{rand_amount()} this quarter, a {random.randint(2,40)}% increase year over year. "
+        f"Key drivers included expansion into new markets and improved retention.\n\n"
+        f"Operational Highlights: The team shipped {random.randint(3,20)} major releases. "
+        f"Customer satisfaction scores rose to {random.randint(70,98)}%.\n\n"
+        f"Outlook: Management expects continued growth into next quarter, with projected "
+        f"revenue of {rand_amount()}.",
+
+        f"ANNUAL PERFORMANCE REPORT\n\nPrepared for: {company} Board of Directors\n"
+        f"Period: Fiscal Year {random.randint(2022,2026)}\n\n"
+        f"Total revenue reached {rand_amount()}, compared to {rand_amount()} the prior year. "
+        f"Operating expenses were {rand_amount()}. Net margin improved by {random.randint(1,15)} "
+        f"percentage points. The board recommends continued investment in R&D.",
+    ]
+    return random.choice(templates)
+
+
+def gen_policy():
+    company = rand_company()
+    templates = [
+        f"{company} EMPLOYEE HANDBOOK — REMOTE WORK POLICY\n\nEffective {rand_date()}, all "
+        f"employees are eligible to work remotely up to {random.randint(1,5)} days per week, "
+        f"subject to manager approval. Employees must remain reachable during core hours "
+        f"(10am-3pm local time). Equipment requests should be submitted to IT at least "
+        f"{random.randint(3,14)} business days in advance.",
+
+        f"DATA PRIVACY AND SECURITY POLICY\n\n{company} requires all employees to complete "
+        f"security training annually. Confidential data must not be stored on personal devices. "
+        f"Any suspected data breach must be reported to the Security team within "
+        f"{random.randint(1,24)} hours of discovery. Violations of this policy may result in "
+        f"disciplinary action up to termination.",
+    ]
+    return random.choice(templates)
