@@ -48,3 +48,49 @@ def _load():
     model.eval()
 
     return model, vocab, checkpoint["labels"]
+def is_classifier_ready() -> bool:
+    """Check without raising — lets API routes degrade gracefully."""
+    try:
+        _load()
+        return True
+    except ClassifierUnavailable:
+        return False
+
+
+def predict_document_type(text: str, top_k: int = 3) -> dict:
+    """
+    Classify a document's text into one of the trained categories.
+
+    Returns:
+        {
+          "predicted_type": "contract",
+          "confidence": 0.94,
+          "top_k": [{"label": "contract", "score": 0.94}, ...],
+          "model": "docbrain-doctype-v1"
+        }
+
+    Raises ClassifierUnavailable if the model hasn't been trained yet —
+    callers should catch this and fall back gracefully (e.g. skip auto-tagging).
+    """
+    model, vocab, labels = _load()
+
+    token_ids = vocab.encode(text, max_len=512)
+    tokens_tensor = torch.tensor(token_ids, dtype=torch.long)
+    offsets_tensor = torch.tensor([0], dtype=torch.long)
+
+    with torch.no_grad():
+        logits = model(tokens_tensor, offsets_tensor)
+        probs = F.softmax(logits, dim=1).squeeze(0)
+
+    ranked = sorted(
+        [{"label": label, "score": round(probs[i].item(), 4)} for i, label in enumerate(labels)],
+        key=lambda x: x["score"],
+        reverse=True,
+    )
+
+    return {
+        "predicted_type": ranked[0]["label"],
+        "confidence": ranked[0]["score"],
+        "top_k": ranked[:top_k],
+        "model": "docbrain-doctype-v1",
+    }
