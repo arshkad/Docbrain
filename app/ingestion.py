@@ -13,6 +13,8 @@ from PyPDF2 import PdfReader
 
 from app.config import settings
 from app.database import get_or_create_collection
+from app.ml.classifier import predict_document_type, is_classifier_ready, ClassifierUnavailable
+
 
 # ─── Text Extraction ─────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ def extract_text(filename: str, file: BinaryIO) -> str:
         return extract_text_from_txt(file)
     else:
         raise ValueError(f"Unsupported file type: {ext}")
+
 
 # ─── Chunking ─────────────────────────────────────────────────────────────────
 
@@ -129,54 +132,3 @@ def chunk_text(
         chunks.append(" ".join(current_sentences))
 
     return chunks
-    
-# ─── Ingestion ─────────────────────────────────────────────────────────────────
-
-def file_hash(content: str) -> str:
-    """SHA-256 fingerprint for deduplication."""
-    return hashlib.sha256(content.encode()).hexdigest()[:16]
-
-
-def ingest_document(
-    collection_name: str,
-    filename: str,
-    content: str,
-    extra_metadata: dict | None = None,
-) -> dict:
-    """
-    Chunk and store a document in the vector database.
-
-    Returns:
-        Summary dict with chunk count and document ID.
-    """
-    collection = get_or_create_collection(collection_name)
-
-    doc_id = f"{Path(filename).stem}_{file_hash(content)}"
-    chunks = chunk_text(content)
-
-    if not chunks:
-        raise ValueError("No text could be extracted from document")
-
-    # Build parallel lists for ChromaDB batch upsert
-    ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
-    metadatas = []
-    for i, chunk in enumerate(chunks):
-        meta = {
-            "doc_id": doc_id,
-            "filename": filename,
-            "chunk_index": i,
-            "total_chunks": len(chunks),
-            "token_count": count_tokens(chunk),
-            **(extra_metadata or {}),
-        }
-        metadatas.append(meta)
-
-    collection.upsert(ids=ids, documents=chunks, metadatas=metadatas)
-
-    return {
-        "doc_id": doc_id,
-        "filename": filename,
-        "chunks_stored": len(chunks),
-        "total_tokens": sum(count_tokens(c) for c in chunks),
-        "collection": collection_name,
-    }
