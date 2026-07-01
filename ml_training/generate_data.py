@@ -82,7 +82,7 @@ def gen_policy():
         f"disciplinary action up to termination.",
     ]
     return random.choice(templates)
-    
+
 def gen_memo():
     sender, dept = rand_name(), random.choice(DEPTS)
     templates = [
@@ -132,3 +132,25 @@ def generate_dataset(n_per_class: int = 150) -> list[dict]:
             examples.append({"text": gen_fn(), "label": label})
     random.shuffle(examples)
     return examples
+
+def main():
+    out_dir = Path(__file__).parent / "data"
+    out_dir.mkdir(exist_ok=True)
+
+    all_examples = generate_dataset(n_per_class=150)
+    split = int(len(all_examples) * 0.85)
+    train, val = all_examples[:split], all_examples[split:]
+
+    with open(out_dir / "train.jsonl", "w") as f:
+        for ex in train:
+            f.write(json.dumps(ex) + "\n")
+    with open(out_dir / "val.jsonl", "w") as f:
+        for ex in val:
+            f.write(json.dumps(ex) + "\n")
+
+    print(f"Generated {len(train)} train / {len(val)} val examples across {len(LABELS)} classes")
+    print(f"Saved to {out_dir}/train.jsonl and {out_dir}/val.jsonl")
+
+
+if __name__ == "__main__":
+    main()
