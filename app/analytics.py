@@ -47,3 +47,53 @@ def init_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_collection ON events(collection_name)")
+        
+def log_event(
+    event_type: str,
+    collection_name: str | None = None,
+    filename: str | None = None,
+    question: str | None = None,
+    latency_ms: int | None = None,
+    chunks_used: int | None = None,
+    success: bool = True,
+):
+    """Record a single usage event. Never raises — analytics must not break the app."""
+    try:
+        with _conn() as c:
+            c.execute(
+                """INSERT INTO events
+                   (event_type, collection_name, filename, question, latency_ms, chunks_used, success, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (event_type, collection_name, filename, question, latency_ms,
+                 chunks_used, int(success), datetime.now(UTC).isoformat()),
+            )
+    except Exception:
+        pass  # analytics failures should never break the main request
+
+
+@contextmanager
+def timed_event(event_type: str, **meta):
+    """
+    Context manager that times a block and logs it as an event.
+
+    Usage:
+        with timed_event("query", collection_name="x", question="y") as result:
+            result["chunks_used"] = len(chunks)
+            ...do work...
+    """
+    start = time.time()
+    result = {"success": True}
+    try:
+        yield result
+    except Exception:
+        result["success"] = False
+        raise
+    finally:
+        latency_ms = int((time.time() - start) * 1000)
+        log_event(
+            event_type=event_type,
+            latency_ms=latency_ms,
+            success=result.get("success", True),
+            chunks_used=result.get("chunks_used"),
+            **meta,
+        )
