@@ -132,3 +132,79 @@ def chunk_text(
         chunks.append(" ".join(current_sentences))
 
     return chunks
+# ─── Ingestion ─────────────────────────────────────────────────────────────────
+
+def file_hash(content: str) -> str:
+    """SHA-256 fingerprint for deduplication."""
+    return hashlib.sha256(content.encode()).hexdigest()[:16]
+
+
+def ingest_document(
+    collection_name: str,
+    filename: str,
+    content: str,
+    extra_metadata: dict | None = None,
+) -> dict:
+    """
+    Chunk and store a document in the vector database.
+
+    If the local PyTorch document-type classifier has been trained, the
+    document is also auto-tagged with a predicted type (contract/invoice/
+    report/policy/memo/other) and confidence score, stored as metadata on
+    every chunk. This is a fast, local, zero-API-cost classification —
+    distinct from the LLM-based `document_type` field returned by
+    /query/insights, which is grounded in the document's actual content via
+    Claude and is more reliable but slower and costs an API call.
+
+    Returns:
+        Summary dict with chunk count, document ID, and (if available)
+        classifier prediction.
+    """
+    collection = get_or_create_collection(collection_name)
+
+    doc_id = f"{Path(filename).stem}_{file_hash(content)}"
+    chunks = chunk_text(content)
+
+    if not chunks:
+        raise ValueError("No text could be extracted from document")
+
+    classification = None
+    if is_classifier_ready():
+        try:
+            # Classify on a representative excerpt — full documents can be
+            # long, and the bag-of-words model gets plenty of signal from
+            # the opening section (titles, headers, and structure cluster there).
+            excerpt = content[:3000]
+            classification = predict_document_type(excerpt)
+        except ClassifierUnavailable:
+            classification = None  # model became unavailable between check and call; degrade silently
+
+    # Build parallel lists for ChromaDB batch upsert
+    ids = [f"{doc_id}_chunk_{i}" for i in range(len(chunks))]
+    metadatas = []
+    for i, chunk in enumerate(chunks):
+        meta = {
+            "doc_id": doc_id,
+            "filename": filename,
+            "chunk_index": i,
+            "total_chunks": len(chunks),
+            "token_count": count_tokens(chunk),
+            **(extra_metadata or {}),
+        }
+        if classification:
+            meta["predicted_doc_type"] = classification["predicted_type"]
+            meta["predicted_doc_type_confidence"] = classification["confidence"]
+        metadatas.append(meta)
+
+    collection.upsert(ids=ids, documents=chunks, metadatas=metadatas)
+
+    result = {
+        "doc_id": doc_id,
+        "filename": filename,
+        "chunks_stored": len(chunks),
+        "total_tokens": sum(count_tokens(c) for c in chunks),
+        "collection": collection_name,
+    }
+    if classification:
+        result["classification"] = classification
+    return result
