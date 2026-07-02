@@ -47,7 +47,7 @@ def init_db():
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_created ON events(created_at)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_events_collection ON events(collection_name)")
-        
+
 def log_event(
     event_type: str,
     collection_name: str | None = None,
@@ -97,3 +97,97 @@ def timed_event(event_type: str, **meta):
             chunks_used=result.get("chunks_used"),
             **meta,
         )
+        
+# ─── Aggregation Queries ───────────────────────────────────────────────────────
+
+def get_summary_stats(days: int = 30) -> dict:
+    """High-level KPI numbers for the dashboard header."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        total_queries = c.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='query' AND created_at >= ?", (since,)
+        ).fetchone()[0]
+
+        total_uploads = c.execute(
+            "SELECT COUNT(*) FROM events WHERE event_type='upload' AND created_at >= ?", (since,)
+        ).fetchone()[0]
+
+        avg_latency = c.execute(
+            "SELECT AVG(latency_ms) FROM events WHERE event_type='query' AND created_at >= ? AND success=1", (since,)
+        ).fetchone()[0]
+
+        success_rate = c.execute(
+            """SELECT
+                 SUM(CASE WHEN success=1 THEN 1 ELSE 0 END) * 1.0 / COUNT(*)
+               FROM events WHERE created_at >= ?""", (since,)
+        ).fetchone()[0]
+
+        active_collections = c.execute(
+            "SELECT COUNT(DISTINCT collection_name) FROM events WHERE created_at >= ? AND collection_name IS NOT NULL", (since,)
+        ).fetchone()[0]
+
+        total_events = c.execute(
+            "SELECT COUNT(*) FROM events WHERE created_at >= ?", (since,)
+        ).fetchone()[0]
+
+    return {
+        "total_queries": total_queries,
+        "total_uploads": total_uploads,
+        "avg_latency_ms": round(avg_latency) if avg_latency else 0,
+        "success_rate": round((success_rate or 1.0) * 100, 1),
+        "active_collections": active_collections,
+        "total_events": total_events,
+        "period_days": days,
+    }
+
+
+def get_query_volume_timeseries(days: int = 14) -> list[dict]:
+    """Daily query counts for the trend chart. Range is inclusive of today."""
+    today = datetime.now(UTC).date()
+    since = today - timedelta(days=days - 1)
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT date(created_at) as day, COUNT(*) as count
+               FROM events
+               WHERE event_type='query' AND date(created_at) >= ?
+               GROUP BY day ORDER BY day ASC""",
+            (since.isoformat(),),
+        ).fetchall()
+
+    by_day = {r["day"]: r["count"] for r in rows}
+    # Fill in missing days with 0 so the chart has no gaps
+    result = []
+    for i in range(days):
+        day = (since + timedelta(days=i)).isoformat()
+        result.append({"date": day, "count": by_day.get(day, 0)})
+    return result
+
+
+def get_top_documents(limit: int = 8) -> list[dict]:
+    """Most-queried documents by chunk-filter usage and summarize/insights calls."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT filename, COUNT(*) as count
+               FROM events
+               WHERE filename IS NOT NULL
+               GROUP BY filename
+               ORDER BY count DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [{"filename": r["filename"], "count": r["count"]} for r in rows]
+
+
+def get_top_collections(limit: int = 8) -> list[dict]:
+    """Most active collections by event count."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT collection_name, COUNT(*) as count
+               FROM events
+               WHERE collection_name IS NOT NULL
+               GROUP BY collection_name
+               ORDER BY count DESC
+               LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [{"collection": r["collection_name"], "count": r["count"]} for r in rows]
