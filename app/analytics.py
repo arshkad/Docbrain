@@ -97,7 +97,7 @@ def timed_event(event_type: str, **meta):
             chunks_used=result.get("chunks_used"),
             **meta,
         )
-        
+
 # ─── Aggregation Queries ───────────────────────────────────────────────────────
 
 def get_summary_stats(days: int = 30) -> dict:
@@ -191,3 +191,52 @@ def get_top_collections(limit: int = 8) -> list[dict]:
             (limit,),
         ).fetchall()
     return [{"collection": r["collection_name"], "count": r["count"]} for r in rows]
+    
+def get_event_breakdown(days: int = 30) -> list[dict]:
+    """Count of events by type — powers a simple pie/bar split."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT event_type, COUNT(*) as count
+               FROM events WHERE created_at >= ?
+               GROUP BY event_type ORDER BY count DESC""",
+            (since,),
+        ).fetchall()
+    return [{"type": r["event_type"], "count": r["count"]} for r in rows]
+
+
+def get_recent_queries(limit: int = 20) -> list[dict]:
+    """Recent query log for an activity feed."""
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT collection_name, question, latency_ms, chunks_used, success, created_at
+               FROM events WHERE event_type='query'
+               ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_latency_distribution(days: int = 30) -> dict:
+    """Percentile breakdown of query latency for performance monitoring."""
+    since = (datetime.now(UTC) - timedelta(days=days)).isoformat()
+    with _conn() as c:
+        rows = c.execute(
+            """SELECT latency_ms FROM events
+               WHERE event_type='query' AND success=1 AND created_at >= ?
+               ORDER BY latency_ms ASC""",
+            (since,),
+        ).fetchall()
+    latencies = [r["latency_ms"] for r in rows if r["latency_ms"] is not None]
+    if not latencies:
+        return {"p50": 0, "p90": 0, "p99": 0, "min": 0, "max": 0, "count": 0}
+
+    def pct(p):
+        idx = min(int(len(latencies) * p), len(latencies) - 1)
+        return latencies[idx]
+
+    return {
+        "p50": pct(0.5), "p90": pct(0.9), "p99": pct(0.99),
+        "min": latencies[0], "max": latencies[-1], "count": len(latencies),
+    }
+
