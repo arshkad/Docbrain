@@ -58,3 +58,19 @@ class Vocabulary:
                 vocab.token_to_id[token] = next_id
                 next_id += 1
         return vocab
+        
+    def encode(self, text: str, max_len: int = 256) -> list[int]:
+        ids = [self.token_to_id.get(tok, self.token_to_id[self.UNK]) for tok in tokenize(text)]
+        return ids[:max_len] if ids else [self.token_to_id[self.UNK]]
+
+    def __len__(self):
+        return len(self.token_to_id)
+
+    def save(self, path: Path):
+        with open(path, "w") as f:
+            json.dump(self.token_to_id, f)
+
+    @classmethod
+    def load(cls, path: Path) -> "Vocabulary":
+        with open(path) as f:
+            return cls(json.load(f))
