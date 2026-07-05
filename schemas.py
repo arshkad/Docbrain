@@ -62,3 +62,24 @@ class DownloadUrlResponse(BaseModel):
     size_bytes: int
     url: str | None = Field(None, description="Presigned S3 URL; null when backend is 'local'")
     expires_in_seconds: int | None = None
+    
+ # ─── Query ────────────────────────────────────────────────────────────────────
+
+class ConversationTurn(BaseModel):
+    role: str = Field(..., pattern=r"^(user|assistant)$")
+    content: str
+
+class QueryRequest(BaseModel):
+    collection_name: str
+    question: str = Field(..., min_length=3, max_length=500)
+    top_k: int = Field(5, ge=1, le=15)
+    doc_filter: str | None = Field(None, description="Scope query to a specific filename")
+    history: list[ConversationTurn] | None = Field(
+        None, description="Prior conversation turns for follow-up question resolution"
+    )
+
+class SourceCitation(BaseModel):
+    filename: str | None
+    chunk: int
+    relevance_score: float
+    excerpt: str
