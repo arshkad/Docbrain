@@ -83,7 +83,7 @@ class SourceCitation(BaseModel):
     chunk: int
     relevance_score: float
     excerpt: str
-    
+
 class QueryResponse(BaseModel):
     answer: str
     sources: list[SourceCitation]
@@ -100,3 +100,21 @@ class SummaryResponse(BaseModel):
     summary_style: str
     summary: str
     based_on_chunks: int
+    
+class InsightsResponse(BaseModel):
+    filename: str
+    insights: dict[str, Any]
+    chunks_analyzed: int
+
+class CompareRequest(BaseModel):
+    collection_name: str
+    doc_a: str
+    doc_b: str
+    aspect: str = Field("key differences and similarities",
+                        description="What aspect to compare")
+
+class CompareResponse(BaseModel):
+    document_a: str
+    document_b: str
+    aspect: str
+    comparison: str
