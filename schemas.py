@@ -62,7 +62,7 @@ class DownloadUrlResponse(BaseModel):
     size_bytes: int
     url: str | None = Field(None, description="Presigned S3 URL; null when backend is 'local'")
     expires_in_seconds: int | None = None
-    
+
  # ─── Query ────────────────────────────────────────────────────────────────────
 
 class ConversationTurn(BaseModel):
@@ -83,3 +83,20 @@ class SourceCitation(BaseModel):
     chunk: int
     relevance_score: float
     excerpt: str
+    
+class QueryResponse(BaseModel):
+    answer: str
+    sources: list[SourceCitation]
+    chunks_used: int
+
+class SummaryRequest(BaseModel):
+    collection_name: str
+    filename: str
+    style: str = Field("executive",
+                       description="executive | detailed | bullets | risks")
+
+class SummaryResponse(BaseModel):
+    filename: str
+    summary_style: str
+    summary: str
+    based_on_chunks: int
