@@ -30,7 +30,7 @@ def test_tokenize_lowercases_and_splits():
 
 def test_tokenize_empty_string():
     assert tokenize("") == []
-    
+
 def test_vocabulary_build_respects_min_freq():
     texts = ["alpha alpha alpha", "beta beta", "gamma"]
     vocab = Vocabulary.build(texts, min_freq=2, max_size=100)
@@ -52,3 +52,18 @@ def test_vocabulary_encode_truncates_to_max_len():
     vocab = Vocabulary.build(["word " * 500], min_freq=1, max_size=1000)
     encoded = vocab.encode("word " * 500, max_len=50)
     assert len(encoded) == 50
+
+def test_vocabulary_encode_empty_text_returns_unk():
+    vocab = Vocabulary.build(["some text"], min_freq=1)
+    encoded = vocab.encode("")
+    assert encoded == [vocab.token_to_id[Vocabulary.UNK]]
+
+
+def test_vocabulary_save_and_load_roundtrip():
+    vocab = Vocabulary.build(["alpha beta gamma delta"], min_freq=1, max_size=100)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "vocab.json"
+        vocab.save(path)
+        loaded = Vocabulary.load(path)
+        assert loaded.token_to_id == vocab.token_to_id
+        assert len(loaded) == len(vocab)
