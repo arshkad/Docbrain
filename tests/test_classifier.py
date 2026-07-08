@@ -67,3 +67,22 @@ def test_vocabulary_save_and_load_roundtrip():
         loaded = Vocabulary.load(path)
         assert loaded.token_to_id == vocab.token_to_id
         assert len(loaded) == len(vocab)
+
+# ─── Model architecture ───────────────────────────────────────────────────────
+
+def test_model_forward_shape():
+    model = DocTypeClassifier(vocab_size=100, embed_dim=16, hidden_dim=8, n_classes=6)
+    tokens = torch.tensor([1, 2, 3, 4, 5], dtype=torch.long)
+    offsets = torch.tensor([0], dtype=torch.long)
+    logits = model(tokens, offsets)
+    assert logits.shape == (1, 6)  # batch size 1, 6 classes
+
+
+def test_model_forward_batched():
+    """Two documents of different lengths in one EmbeddingBag-style batch."""
+    model = DocTypeClassifier(vocab_size=100, embed_dim=16, hidden_dim=8, n_classes=6)
+    batch = [([1, 2, 3], 0), ([4, 5], 1)]
+    tokens, offsets, labels = collate_batch(batch)
+    logits = model(tokens, offsets)
+    assert logits.shape == (2, 6)
+    assert labels.tolist() == [0, 1]
