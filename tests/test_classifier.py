@@ -115,3 +115,26 @@ def test_model_is_trainable_single_step():
         losses.append(loss.item())
 
     assert losses[-1] < losses[0]  # loss should decrease with training
+
+# ─── Synthetic data generation ────────────────────────────────────────────────
+
+def test_generate_data_produces_all_labels():
+    from ml_training.generate_data import generate_dataset, LABELS as DATA_LABELS
+    examples = generate_dataset(n_per_class=5)
+    seen_labels = {ex["label"] for ex in examples}
+    assert seen_labels == set(DATA_LABELS)
+
+
+def test_generate_data_label_balance():
+    from ml_training.generate_data import generate_dataset
+    examples = generate_dataset(n_per_class=10)
+    from collections import Counter
+    counts = Counter(ex["label"] for ex in examples)
+    assert all(c == 10 for c in counts.values())
+
+
+def test_generate_data_nonempty_text():
+    from ml_training.generate_data import generate_dataset
+    examples = generate_dataset(n_per_class=3)
+    assert all(len(ex["text"]) > 20 for ex in examples)
+
