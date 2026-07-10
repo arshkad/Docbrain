@@ -160,3 +160,67 @@ def test_classifier_unavailable_when_no_checkpoint():
             clf_module.MODEL_PATH = original_model_path
             clf_module.VOCAB_PATH = original_vocab_path
             clf_module._load.cache_clear()
+            
+def test_classifier_predicts_with_real_trained_checkpoint():
+    """
+    End-to-end: train a tiny model on synthetic data in a temp dir, then
+    verify predict_document_type loads it and returns a well-formed result.
+    This does NOT depend on the shipped checkpoint being present — it trains
+    its own in isolation so the test is self-contained and fast.
+    """
+    from ml_training.generate_data import generate_dataset
+    from app.ml.model import DocTypeClassifier, Vocabulary, collate_batch, LABELS as MODEL_LABELS
+    from app.ml import classifier as clf_module
+
+    examples = generate_dataset(n_per_class=20)
+    texts = [ex["text"] for ex in examples]
+    label_to_id = {label: i for i, label in enumerate(MODEL_LABELS)}
+
+    vocab = Vocabulary.build(texts, min_freq=1, max_size=2000)
+    encoded = [(vocab.encode(ex["text"]), label_to_id[ex["label"]]) for ex in examples]
+
+    model = DocTypeClassifier(vocab_size=len(vocab), embed_dim=16, hidden_dim=8, n_classes=len(MODEL_LABELS))
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    criterion = torch.nn.CrossEntropyLoss()
+
+    # A handful of quick training steps — doesn't need to converge, just needs
+    # to produce a valid checkpoint file for the inference layer to load.
+    for _ in range(5):
+        tokens, offsets, labels = collate_batch(encoded)
+        optimizer.zero_grad()
+        loss = criterion(model(tokens, offsets), labels)
+        loss.backward()
+        optimizer.step()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        model_path = Path(tmp) / "classifier.pt"
+        vocab_path = Path(tmp) / "vocab.json"
+        torch.save({
+            "model_state": model.state_dict(),
+            "vocab_size": len(vocab),
+            "embed_dim": 16,
+            "hidden_dim": 8,
+            "labels": MODEL_LABELS,
+            "val_acc": 1.0,
+        }, model_path)
+        vocab.save(vocab_path)
+
+        original_model_path = clf_module.MODEL_PATH
+        original_vocab_path = clf_module.VOCAB_PATH
+        try:
+            clf_module.MODEL_PATH = model_path
+            clf_module.VOCAB_PATH = vocab_path
+            clf_module._load.cache_clear()
+
+            assert clf_module.is_classifier_ready() is True
+            result = clf_module.predict_document_type("INVOICE #123 TOTAL DUE: $500", top_k=3)
+
+            assert result["predicted_type"] in MODEL_LABELS
+            assert 0.0 <= result["confidence"] <= 1.0
+            assert len(result["top_k"]) == 3
+            # top_k scores should sum to ~1.0 (softmax over all classes, sliced to top 3 of 6)
+            assert result["model"] == "docbrain-doctype-v1"
+        finally:
+            clf_module.MODEL_PATH = original_model_path
+            clf_module.VOCAB_PATH = original_vocab_path
+            clf_module._load.cache_clear()
