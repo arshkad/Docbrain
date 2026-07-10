@@ -160,7 +160,7 @@ def test_classifier_unavailable_when_no_checkpoint():
             clf_module.MODEL_PATH = original_model_path
             clf_module.VOCAB_PATH = original_vocab_path
             clf_module._load.cache_clear()
-            
+
 def test_classifier_predicts_with_real_trained_checkpoint():
     """
     End-to-end: train a tiny model on synthetic data in a temp dir, then
@@ -224,3 +224,45 @@ def test_classifier_predicts_with_real_trained_checkpoint():
             clf_module.MODEL_PATH = original_model_path
             clf_module.VOCAB_PATH = original_vocab_path
             clf_module._load.cache_clear()
+            
+def test_predict_document_type_top_k_sorted_descending():
+    """top_k results must be sorted by score, highest confidence first."""
+    from ml_training.generate_data import generate_dataset
+    from app.ml.model import DocTypeClassifier, Vocabulary, collate_batch, LABELS as MODEL_LABELS
+    from app.ml import classifier as clf_module
+
+    examples = generate_dataset(n_per_class=15)
+    texts = [ex["text"] for ex in examples]
+    label_to_id = {label: i for i, label in enumerate(MODEL_LABELS)}
+    vocab = Vocabulary.build(texts, min_freq=1, max_size=2000)
+    encoded = [(vocab.encode(ex["text"]), label_to_id[ex["label"]]) for ex in examples]
+
+    model = DocTypeClassifier(vocab_size=len(vocab), embed_dim=16, hidden_dim=8, n_classes=len(MODEL_LABELS))
+
+    with tempfile.TemporaryDirectory() as tmp:
+        model_path = Path(tmp) / "classifier.pt"
+        vocab_path = Path(tmp) / "vocab.json"
+        torch.save({
+            "model_state": model.state_dict(), "vocab_size": len(vocab),
+            "embed_dim": 16, "hidden_dim": 8, "labels": MODEL_LABELS, "val_acc": 0.5,
+        }, model_path)
+        vocab.save(vocab_path)
+
+        original_model_path = clf_module.MODEL_PATH
+        original_vocab_path = clf_module.VOCAB_PATH
+        try:
+            clf_module.MODEL_PATH = model_path
+            clf_module.VOCAB_PATH = vocab_path
+            clf_module._load.cache_clear()
+
+            result = clf_module.predict_document_type("some arbitrary text content", top_k=4)
+            scores = [item["score"] for item in result["top_k"]]
+            assert scores == sorted(scores, reverse=True)
+        finally:
+            clf_module.MODEL_PATH = original_model_path
+            clf_module.VOCAB_PATH = original_vocab_path
+            clf_module._load.cache_clear()
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])
