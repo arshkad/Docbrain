@@ -138,3 +138,25 @@ def test_generate_data_nonempty_text():
     examples = generate_dataset(n_per_class=3)
     assert all(len(ex["text"]) > 20 for ex in examples)
 
+# ─── Inference layer (graceful degradation + real checkpoint) ────────────────
+
+def test_classifier_unavailable_when_no_checkpoint():
+    """Pointing at an empty directory should report not-ready, not crash."""
+    import importlib
+    from app.ml import classifier as clf_module
+
+    with tempfile.TemporaryDirectory() as tmp:
+        original_model_path = clf_module.MODEL_PATH
+        original_vocab_path = clf_module.VOCAB_PATH
+        try:
+            clf_module.MODEL_PATH = Path(tmp) / "classifier.pt"
+            clf_module.VOCAB_PATH = Path(tmp) / "vocab.json"
+            clf_module._load.cache_clear()
+
+            assert clf_module.is_classifier_ready() is False
+            with pytest.raises(clf_module.ClassifierUnavailable):
+                clf_module.predict_document_type("some text")
+        finally:
+            clf_module.MODEL_PATH = original_model_path
+            clf_module.VOCAB_PATH = original_vocab_path
+            clf_module._load.cache_clear()
