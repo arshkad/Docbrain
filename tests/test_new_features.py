@@ -142,7 +142,7 @@ def mock_claude_for_history():
         mock_response.content = [MagicMock(text="It expires December 31, 2024, same as before.")]
         mock.messages.create.return_value = mock_response
         yield mock
-        
+
 def test_rag_query_passes_history_to_claude(mock_claude_for_history, mock_search_for_history):
     """History turns should be included in the messages sent to Claude."""
     from app.llm import rag_query
@@ -169,3 +169,26 @@ def test_rag_query_without_history_single_turn(mock_claude_for_history, mock_sea
     call_args = mock_claude_for_history.messages.create.call_args
     sent_messages = call_args.kwargs["messages"]
     assert len(sent_messages) == 1
+
+
+def test_history_to_dicts_conversion():
+    """Pydantic ConversationTurn objects should convert cleanly to plain dicts."""
+    from app.routers.query import _history_to_dicts
+    from app.schemas import ConversationTurn
+
+    turns = [
+        ConversationTurn(role="user", content="hello"),
+        ConversationTurn(role="assistant", content="hi there"),
+    ]
+    result = _history_to_dicts(turns)
+    assert result == [
+        {"role": "user", "content": "hello"},
+        {"role": "assistant", "content": "hi there"},
+    ]
+
+
+def test_history_to_dicts_none():
+    """None history should convert to None, not crash or return []."""
+    from app.routers.query import _history_to_dicts
+    assert _history_to_dicts(None) is None
+
