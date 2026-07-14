@@ -119,3 +119,26 @@ def test_latency_distribution_percentiles(analytics_module):
     assert dist["min"] == 100
     assert dist["max"] == 500
     assert dist["count"] == 5
+    
+# ─── Multi-turn conversation (history) ────────────────────────────────────────
+
+@pytest.fixture
+def mock_search_for_history():
+    sample_chunks = [
+        {
+            "text": "Contract A expires December 31, 2024.",
+            "metadata": {"filename": "contract.pdf", "chunk_index": 0, "total_chunks": 1},
+            "score": 0.9,
+        },
+    ]
+    with patch("app.llm.semantic_search", return_value=sample_chunks) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_claude_for_history():
+    with patch("app.llm.client") as mock:
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="It expires December 31, 2024, same as before.")]
+        mock.messages.create.return_value = mock_response
+        yield mock
