@@ -68,7 +68,7 @@ def test_timeseries_includes_today(analytics_module):
     series = analytics_module.get_query_volume_timeseries(days=5)
     assert len(series) == 5
     assert series[-1]["count"] == 1  # today's bucket has our event
-    
+
 def test_timeseries_fills_gaps(analytics_module):
     """Days with no events should appear as 0, not be skipped."""
     series = analytics_module.get_query_volume_timeseries(days=7)
@@ -102,3 +102,20 @@ def test_recent_queries_ordering(analytics_module):
     analytics_module.log_event("query", question="second question", success=True)
     recent = analytics_module.get_recent_queries(limit=10)
     assert recent[0]["question"] == "second question"
+
+
+def test_latency_distribution_empty(analytics_module):
+    """With no data, latency percentiles should be zero, not crash."""
+    dist = analytics_module.get_latency_distribution()
+    assert dist["count"] == 0
+    assert dist["p50"] == 0
+
+
+def test_latency_distribution_percentiles(analytics_module):
+    """Percentiles should reflect the actual latency spread."""
+    for ms in [100, 200, 300, 400, 500]:
+        analytics_module.log_event("query", latency_ms=ms, success=True)
+    dist = analytics_module.get_latency_distribution()
+    assert dist["min"] == 100
+    assert dist["max"] == 500
+    assert dist["count"] == 5
