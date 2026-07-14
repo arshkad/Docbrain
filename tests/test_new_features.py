@@ -119,7 +119,7 @@ def test_latency_distribution_percentiles(analytics_module):
     assert dist["min"] == 100
     assert dist["max"] == 500
     assert dist["count"] == 5
-    
+
 # ─── Multi-turn conversation (history) ────────────────────────────────────────
 
 @pytest.fixture
@@ -142,3 +142,30 @@ def mock_claude_for_history():
         mock_response.content = [MagicMock(text="It expires December 31, 2024, same as before.")]
         mock.messages.create.return_value = mock_response
         yield mock
+        
+def test_rag_query_passes_history_to_claude(mock_claude_for_history, mock_search_for_history):
+    """History turns should be included in the messages sent to Claude."""
+    from app.llm import rag_query
+    history = [
+        {"role": "user", "content": "What is Contract A?"},
+        {"role": "assistant", "content": "Contract A is a vendor agreement."},
+    ]
+    rag_query("legal", "When does it expire?", history=history)
+
+    call_args = mock_claude_for_history.messages.create.call_args
+    sent_messages = call_args.kwargs["messages"]
+    # Should contain the 2 history turns + the new question
+    assert len(sent_messages) == 3
+    assert sent_messages[0]["role"] == "user"
+    assert sent_messages[1]["role"] == "assistant"
+    assert sent_messages[2]["role"] == "user"
+    assert "When does it expire?" in sent_messages[2]["content"]
+
+
+def test_rag_query_without_history_single_turn(mock_claude_for_history, mock_search_for_history):
+    """No history should mean exactly one message is sent."""
+    from app.llm import rag_query
+    rag_query("legal", "When does Contract A expire?")
+    call_args = mock_claude_for_history.messages.create.call_args
+    sent_messages = call_args.kwargs["messages"]
+    assert len(sent_messages) == 1
