@@ -68,3 +68,37 @@ def test_timeseries_includes_today(analytics_module):
     series = analytics_module.get_query_volume_timeseries(days=5)
     assert len(series) == 5
     assert series[-1]["count"] == 1  # today's bucket has our event
+    
+def test_timeseries_fills_gaps(analytics_module):
+    """Days with no events should appear as 0, not be skipped."""
+    series = analytics_module.get_query_volume_timeseries(days=7)
+    assert len(series) == 7
+    assert all(d["count"] == 0 for d in series)
+
+
+def test_top_documents_ranking(analytics_module):
+    """Documents queried more often should rank higher."""
+    for _ in range(3):
+        analytics_module.log_event("query", filename="popular.pdf", success=True)
+    analytics_module.log_event("query", filename="rare.pdf", success=True)
+    top = analytics_module.get_top_documents()
+    assert top[0]["filename"] == "popular.pdf"
+    assert top[0]["count"] == 3
+
+
+def test_event_breakdown(analytics_module):
+    """Breakdown should group by event_type correctly."""
+    analytics_module.log_event("query", success=True)
+    analytics_module.log_event("upload", success=True)
+    analytics_module.log_event("upload", success=True)
+    breakdown = {b["type"]: b["count"] for b in analytics_module.get_event_breakdown()}
+    assert breakdown["upload"] == 2
+    assert breakdown["query"] == 1
+
+
+def test_recent_queries_ordering(analytics_module):
+    """Recent queries should return most recent first."""
+    analytics_module.log_event("query", question="first question", success=True)
+    analytics_module.log_event("query", question="second question", success=True)
+    recent = analytics_module.get_recent_queries(limit=10)
+    assert recent[0]["question"] == "second question"
