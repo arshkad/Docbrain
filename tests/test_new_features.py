@@ -192,3 +192,20 @@ def test_history_to_dicts_none():
     from app.routers.query import _history_to_dicts
     assert _history_to_dicts(None) is None
 
+# ─── Streaming RAG ─────────────────────────────────────────────────────────────
+
+def test_rag_query_stream_yields_sources_first(mock_search_for_history):
+    """The first SSE event should always be the sources event."""
+    import json
+    with patch("app.llm.client") as mock_client:
+        mock_stream_ctx = MagicMock()
+        mock_stream_ctx.__enter__.return_value.text_stream = iter(["Hello", " world"])
+        mock_client.messages.stream.return_value = mock_stream_ctx
+
+        from app.llm import rag_query_stream
+        events = list(rag_query_stream("legal", "test question"))
+
+        first_event = events[0]
+        assert first_event.startswith("data: ")
+        payload = json.loads(first_event[6:].strip())
+        assert payload["type"] == "sources"
