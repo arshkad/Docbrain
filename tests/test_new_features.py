@@ -219,7 +219,7 @@ def test_rag_query_stream_no_chunks_yields_error():
         assert len(events) == 1
         payload = json.loads(events[0][6:].strip())
         assert payload["type"] == "error"
-        
+
 # ─── Bulk delete & tagging (router-level logic, mocked ChromaDB) ──────────────
 
 @pytest.fixture
@@ -237,3 +237,14 @@ def test_bulk_delete_request_schema():
     from app.routers.documents import BulkDeleteRequest
     req = BulkDeleteRequest(collection_name="legal", filenames=["a.pdf", "b.pdf"])
     assert len(req.filenames) == 2
+
+
+def test_tag_update_request_schema():
+    """TagUpdateRequest should validate tags as a list of strings."""
+    from app.routers.documents import TagUpdateRequest
+    req = TagUpdateRequest(collection_name="legal", filename="a.pdf", tags=["urgent", "2024"])
+    assert req.tags == ["urgent", "2024"]
+
+
+if __name__ == "__main__":
+    pytest.main([__file__, "-v", "--tb=short"])
