@@ -219,3 +219,21 @@ def test_rag_query_stream_no_chunks_yields_error():
         assert len(events) == 1
         payload = json.loads(events[0][6:].strip())
         assert payload["type"] == "error"
+        
+# ─── Bulk delete & tagging (router-level logic, mocked ChromaDB) ──────────────
+
+@pytest.fixture
+def mock_chroma_collection():
+    col = MagicMock()
+    col.get.return_value = {
+        "ids": ["doc_chunk_0", "doc_chunk_1"],
+        "metadatas": [{"filename": "doc.pdf", "tag_0": "old"}, {"filename": "doc.pdf", "tag_0": "old"}],
+    }
+    return col
+
+
+def test_bulk_delete_request_schema():
+    """BulkDeleteRequest should validate a list of filenames."""
+    from app.routers.documents import BulkDeleteRequest
+    req = BulkDeleteRequest(collection_name="legal", filenames=["a.pdf", "b.pdf"])
+    assert len(req.filenames) == 2
