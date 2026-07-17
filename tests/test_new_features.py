@@ -209,3 +209,13 @@ def test_rag_query_stream_yields_sources_first(mock_search_for_history):
         assert first_event.startswith("data: ")
         payload = json.loads(first_event[6:].strip())
         assert payload["type"] == "sources"
+
+def test_rag_query_stream_no_chunks_yields_error():
+    """No retrieved chunks should yield a single error event and stop."""
+    import json
+    with patch("app.llm.semantic_search", return_value=[]):
+        from app.llm import rag_query_stream
+        events = list(rag_query_stream("empty-collection", "anything?"))
+        assert len(events) == 1
+        payload = json.loads(events[0][6:].strip())
+        assert payload["type"] == "error"
