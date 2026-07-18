@@ -31,7 +31,7 @@ def test_chunk_text_respects_size():
     chunks = chunk_text(long_text, chunk_size=100, overlap=10)
     for chunk in chunks:
         assert count_tokens(chunk) <= 160  # tolerance for word-based approximation + overlap
-        
+
 def test_chunk_text_short_doc():
     """Short documents should produce exactly one chunk."""
     short_text = "This is a very short document. It has two sentences."
@@ -48,3 +48,19 @@ def test_chunk_overlap_continuity():
         # Last sentence of chunk N should appear in start of chunk N+1
         # (not guaranteed for all cases, but overlap should reduce context loss)
         assert len(chunks) >= 2
+
+def test_file_hash_deterministic():
+    """Same content should always produce same hash."""
+    content = "Hello, world!"
+    assert file_hash(content) == file_hash(content)
+
+
+def test_file_hash_unique():
+    """Different content should produce different hashes."""
+    assert file_hash("content A") != file_hash("content B")
+
+
+def test_count_tokens():
+    """Token count should be positive for non-empty text."""
+    assert count_tokens("Hello world") > 0
+    assert count_tokens("") == 0
