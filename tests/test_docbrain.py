@@ -64,7 +64,7 @@ def test_count_tokens():
     """Token count should be positive for non-empty text."""
     assert count_tokens("Hello world") > 0
     assert count_tokens("") == 0
-    
+
 # ─── API Tests (mocked) ───────────────────────────────────────────────────────
 
 @pytest.fixture
@@ -101,3 +101,13 @@ def test_root_endpoint(client):
     assert response.status_code == 200
     assert response.json()["service"] == "DocBrain API"
 
+# ─── LLM Layer Tests (mocked) ─────────────────────────────────────────────────
+
+@pytest.fixture
+def mock_claude():
+    """Mock Claude API calls."""
+    with patch("app.llm.client") as mock:
+        mock_response = MagicMock()
+        mock_response.content = [MagicMock(text="Mocked Claude response")]
+        mock.messages.create.return_value = mock_response
+        yield mock
