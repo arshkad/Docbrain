@@ -64,3 +64,40 @@ def test_count_tokens():
     """Token count should be positive for non-empty text."""
     assert count_tokens("Hello world") > 0
     assert count_tokens("") == 0
+    
+# ─── API Tests (mocked) ───────────────────────────────────────────────────────
+
+@pytest.fixture
+def client():
+    """Create test client with mocked ChromaDB."""
+    with patch("app.database.chromadb.PersistentClient") as mock_chroma:
+        # Setup mock client
+        mock_client = MagicMock()
+        mock_chroma.return_value = mock_client
+        mock_client.heartbeat.return_value = True
+
+        # Mock collection
+        mock_col = MagicMock()
+        mock_col.count.return_value = 0
+        mock_col.metadata = {}
+        mock_client.get_or_create_collection.return_value = mock_col
+        mock_client.list_collections.return_value = []
+
+        from app.main import app
+        return TestClient(app)
+
+
+def test_health_endpoint(client):
+    """Health check should return 200."""
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "healthy"
+
+
+def test_root_endpoint(client):
+    """Root should return service info."""
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json()["service"] == "DocBrain API"
+
