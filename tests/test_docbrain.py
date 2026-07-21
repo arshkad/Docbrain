@@ -157,7 +157,7 @@ def test_summarize_executive(mock_claude, mock_search):
     assert result["summary_style"] == "executive"
     assert result["filename"] == "contract.pdf"
     assert "summary" in result
-    
+
 def test_summarize_invalid_style(mock_search):
     """Invalid summary style should raise ValueError."""
     from app.llm import summarize_document
@@ -183,3 +183,14 @@ def test_extract_insights(mock_search):
         assert result["insights"]["document_type"] == "contract"
         assert len(result["insights"]["financial_figures"]) == 1
         assert result["insights"]["financial_figures"][0]["amount"] == "$50,000"
+
+
+def test_compare_documents(mock_claude):
+    """Document comparison should include both doc names."""
+    sample_chunks = [{"text": "Sample content", "metadata": {"filename": "a.pdf", "chunk_index": 0, "total_chunks": 1}, "score": 0.9}]
+    with patch("app.llm.semantic_search", return_value=sample_chunks):
+        from app.llm import compare_documents
+        result = compare_documents("test-col", "vendor_a.pdf", "vendor_b.pdf", "pricing")
+        assert result["document_a"] == "vendor_a.pdf"
+        assert result["document_b"] == "vendor_b.pdf"
+        assert result["aspect"] == "pricing"
